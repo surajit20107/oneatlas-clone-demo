@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ModelStatus {
+  ACTIVE
+  DEPRECATED
+  PREVIEW
+  RETIRED
+}
+
+enum BenchmarkCategory {
+  GENERAL
+  REASONING
+  CODING
+  MATHEMATICS
+  VISION
+  OTHER
+}
+
+model Company {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  slug         String          @unique
+  description  String?
+  website      String?
+  logoUrl      String?
+  headquarters String?
+  foundedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  models       Model[]
+  providers    Provider[]
+  @@index([name])
+}
+
+model Provider {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  slug            String          @unique
+  description     String?
+  website         String?
+  logoUrl         String?
+  documentationUrl String?
+  companyId       String?
+  company         Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  modelListings   ModelProvider[]
+  pricing         Pricing[]
+  @@index([name])
+}
+
+model Model {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  modelIdentifier String        @unique
+  description    String?
+  modelFamily    String?
+  companyId      String
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contextWindow  Int?
+  maxOutputTokens Int?
+  releaseDate    DateTime?
+  lastUpdatedAt  DateTime?
+  isOpenSource   Boolean        @default(false)
+  license        String?
+  status         ModelStatus    @default(ACTIVE)
+  isDemo         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  providers      ModelProvider[]
+  capabilities   ModelCapability[]
+  modalities     ModelModality[]
+  pricing        Pricing[]
+  benchmarkResults BenchmarkResult[]
+  releases       ModelRelease[]
+  @@index([name])
+  @@index([modelFamily])
+  @@index([companyId, status])
+  @@index([isOpenSource])
+  @@index([contextWindow])
+}
+
+model ModelProvider {
+  id                String   @id @default(cuid())
+  modelId           String
+  providerId        String
+  providerModelId   String?
+  endpoint          String?
+  isAvailable       Boolean  @default(true)
+  supportedFeatures String[] @default([])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  model             Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  provider          Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  @@unique([modelId, providerId])
+  @@index([providerId, isAvailable])
+}
+
+model Capability {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  slug        String            @unique
+  description String?
+  models      ModelCapability[]
+}
+
+model ModelCapability {
+  modelId      String
+  capabilityId String
+  model        Model      @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  capability   Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  @@id([modelId, capabilityId])
+  @@index([capabilityId])
+}
+
+model Modality {
+  id      String          @id @default(cuid())
+  name    String          @unique
+  slug    String          @unique
+  models  ModelModality[]
+}
+
+model ModelModality {
+  modelId    String
+  modalityId String
+  supportsInput  Boolean @default(true)
+  supportsOutput Boolean @default(false)
+  model      Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modality   Modality @relation(fields: [modalityId], references: [id], onDelete: Cascade)
+  @@id([modelId, modalityId])
+  @@index([modalityId])
+}
+
+model Pricing {
+  id                         String   @id @default(cuid())
+  modelId                    String
+  providerId                 String?
+  inputPricePerMillionTokens Decimal? @db.Decimal(12, 6)
+  outputPricePerMillionTokens Decimal? @db.Decimal(12, 6)
+  cachedInputPricePerMillionTokens Decimal? @db.Decimal(12, 6)
+  currency                   String   @default("USD")
+  effectiveFrom              DateTime @default(now())
+  effectiveTo                DateTime?
+  sourceUrl                  String?
+  isDemo                     Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  model                      Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  provider                   Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  @@index([modelId, effectiveFrom])
+  @@index([providerId, effectiveFrom])
+}
+
+model Benchmark {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  slug        String             @unique
+  description String?
+  category    BenchmarkCategory  @default(OTHER)
+  sourceUrl   String?
+  results     BenchmarkResult[]
+  @@index([category])
+}
+
+model BenchmarkResult {
+  id             String    @id @default(cuid())
+  modelId        String
+  benchmarkId    String
+  score          Decimal   @db.Decimal(10, 4)
+  scoreUnit      String    @default("%")
+  evaluationDate DateTime
+  sourceUrl      String?
+  isDemo         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  model          Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  benchmark      Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+  @@unique([modelId, benchmarkId, evaluationDate])
+  @@index([benchmarkId, score])
+  @@index([modelId, evaluationDate])
+}
+
+model ModelRelease {
+  id              String   @id @default(cuid())
+  modelId         String
+  version         String
+  releaseDate     DateTime
+  changelog       String?
+  announcementUrl String?
+  createdAt       DateTime @default(now())
+  model           Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  @@unique([modelId, version])
+  @@index([modelId, releaseDate])
+}
